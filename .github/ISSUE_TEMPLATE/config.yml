@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Problem with an agent, skill, or workflow
+    url: https://github.com/vudovn/ag-kit/issues
+    about: The kit content is vendored verbatim from ag-kit. Report content problems upstream.
+  - name: Security vulnerability
+    url: https://github.com/daldindev/agentic-skills/security/advisories/new
+    about: Report suspected security issues privately.

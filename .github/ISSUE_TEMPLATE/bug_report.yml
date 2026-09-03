@@ -1,0 +1,55 @@
+name: Bug report
+description: Report an installer error, crash, or unexpected install or update result.
+title: "bug: "
+labels:
+  - bug
+  - needs reproduction
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a bug. A minimal reproduction helps a lot. For problems with the wording or advice inside an agent, skill, or workflow, report upstream in ag-kit instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran, including flags such as --ref or --archive.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the terminal output, error message, or stack trace.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: Install state
+      description: Output of `agentic-skills status --json`, with anything private removed. It includes the upstream commit that was installed.
+      render: json
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Include Node.js, your operating system, and this package version.
+      placeholder: "Node 22.x, Windows 11, agentic-skills 0.1.0"
+    validations:
+      required: true
