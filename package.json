@@ -9,7 +9,7 @@
     "node": ">=20.11.0"
   },
   "bin": {
-    "agentic-skills": "./src/cli.mjs"
+    "agentic-skills": "src/cli.mjs"
   },
   "files": [
     "src",
