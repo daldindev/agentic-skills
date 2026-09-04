@@ -40,3 +40,35 @@ jobs:
 
       - name: Check package contents
         run: npm run pack:check
+
+  smoke:
+    name: Install the packed tarball and run the CLI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Pack the package
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+
+      # `npm pack --dry-run` cannot catch a bin that fails to link, so install
+      # the real tarball into a clean project and run the executable.
+      - name: Install the tarball into a clean project
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/daldindev-agentic-skills-*.tgz
+
+      - name: Run the installed executable
+        run: |
+          cd "$RUNNER_TEMP/smoke"
+          test -x node_modules/.bin/agentic-skills
+          ./node_modules/.bin/agentic-skills --version
+          ./node_modules/.bin/agentic-skills --help | head -1
