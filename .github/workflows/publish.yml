@@ -60,5 +60,20 @@ jobs:
       - name: Run publish checks
         run: npm run release:check
 
+      # A release published after the fact, or a workflow re-run, must not fail
+      # on npm rejecting a version that is already there.
+      - name: Check whether this version is already on npm
+        id: published
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published; skipping." >&2
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish package
+        if: steps.published.outputs.already == 'false'
         run: npm publish --access public --provenance
