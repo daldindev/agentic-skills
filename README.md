@@ -31,7 +31,7 @@ npx agentic-skills init
 Requirements:
 
 - Node.js `>=20.11`
-- Network access to `codeload.github.com`, where GitHub serves source archives, when you run `init`, `update`, or `sync`
+- Network access to `codeload.github.com`, where GitHub serves source archives, when you run `init`, `update`, `sync`, or `diff`
 
 ## Quick Start
 
@@ -57,6 +57,7 @@ Point your assistant at `.agents/ARCHITECTURE.md`. It lists every component with
 | `agentic-skills update` | Download ag-kit again and update installed files, keeping the ones you edited |
 | `agentic-skills sync` | Install if missing, update if present. One command that works in both states, for unattended runs |
 | `agentic-skills status` | Show what is installed, from which upstream commit, and which files were changed locally |
+| `agentic-skills diff` | Show why your edits froze a file, and what they are holding back |
 
 | Option | Purpose |
 | --- | --- |
@@ -64,7 +65,9 @@ Point your assistant at `.agents/ARCHITECTURE.md`. It lists every component with
 | `-d, --dir <name>` | Install directory inside the project, default `.agents` |
 | `-r, --ref <git-ref>` | Upstream branch, tag, or commit to install, default `main` |
 | `--archive <source>` | Install from a local ag-kit `.tar.gz` or a URL instead of GitHub |
+| `--base-archive <source>` | The version you installed from, instead of downloading the commit in the manifest |
 | `-f, --force` | Overwrite files that were modified locally |
+| `--no-merge` | Never combine a local edit with an upstream change; leave every edited file frozen |
 | `--dry-run` | Download and print the plan without writing anything |
 | `--json` | Print machine-readable output |
 
@@ -83,9 +86,22 @@ For each file it compares what is installed, what upstream now has, and the hash
 | Situation | Result |
 | --- | --- |
 | You never touched the file | Updated, or deleted when upstream dropped it |
-| You edited the file | Skipped and listed, unless `--force` |
+| You edited it somewhere upstream did not | Both changes kept |
+| You edited it where upstream also changed it | Skipped and listed, unless `--force` |
 | You created the file yourself | Never touched |
 | Upstream added a file | Installed |
+
+Both are only kept when the two changes can be told apart and never touch. Anywhere they do touch, or where the version you installed from cannot be read, the file stays frozen instead. **Nothing you wrote is ever dropped to make that work**, and a file is never left half-combined: it is reconciled whole or left exactly as it was. `--no-merge` turns the attempt off entirely.
+
+`diff` shows what a skipped file is holding back, and whose text is whose. It reads three versions — the commit you installed from, your copy, and current upstream — so every difference has a known author:
+
+```bash
+npx @daldindev/agentic-skills diff
+```
+
+That lists the frozen files and what each one is stuck on. Pass a path to see the three versions of every changed region in one file.
+
+Nothing is written and nothing is merged, so the decision stays yours: fold the upstream change in by hand, or take upstream and lose your edit with `--force`. Until you do one or the other, that file sits out every update.
 
 To stay on a known upstream state instead of `main`, pass a tag or commit. The same flag reproduces an earlier install exactly:
 

@@ -6,6 +6,19 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- `update` and `sync` now keep both changes when a local edit and an upstream change never wrote in the same place, instead of freezing the file for either. A file is only ever combined when the version it was installed from can be read and hashes to exactly what the manifest recorded, and only when no two changes touch; otherwise it stays frozen, exactly as before. Nothing local is ever dropped to make a merge possible, and no file is left half-combined.
+- `--no-merge` turns that off, leaving every edited file frozen the way earlier versions did.
+- `agentic-skills diff`: for every file a local edit froze, compares three versions - the commit you installed from, your copy, and current upstream - so every difference has a known author. Without a path it lists the frozen files and says whether each is blocked by a real overlap or only by the per-file rule; with a path it prints all three versions of every changed region. Nothing is written, and nothing is merged.
+- `--base-archive` supplies the version you installed from as a local tarball or URL, instead of downloading the commit recorded in the manifest. Used by `update`, `sync`, and `diff`.
+
+### Fixed
+
+- The manifest no longer advances the recorded hash of a file that was skipped. Nothing was written to that file, so the version it descends from has not changed; recording the newer one made it look as though the user had deleted an upstream change they had merely not taken yet.
+
 ## [0.2.0] - 2026-09-05
 
 ### Added

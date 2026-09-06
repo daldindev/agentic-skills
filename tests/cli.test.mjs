@@ -119,6 +119,164 @@ test("sync --force overwrites local edits instead of exiting 2", async (t) => {
   assert.equal(await fs.readFile(path.join(project, ".agents", "workflows", "go.md"), "utf8"), md("go"));
 });
 
+const MERGE_BODY = "alpha v1\n\n## Setup\n\nstep one\nstep two\nstep three\n\n## Notes\n\nread the docs\n";
+
+test("update merges an edit upstream stayed away from, and exits 0", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project, { skillBody: MERGE_BODY });
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, (await fs.readFile(skill, "utf8")).replace("step one", "step ONE"));
+
+  const newer = await writeArchive(project, { skillBody: MERGE_BODY.replace("read the docs", "read the manual") });
+  const result = await exec(["update", "--path", project, "--archive", newer, "--base-archive", base]);
+
+  assert.equal(result.code ?? 0, 0, "a merged file is not a skipped file");
+  assert.match(result.stdout, /merged 1/);
+  assert.match(result.stdout, /Merged \(your change and upstream's did not touch\) \(1\):/);
+
+  const merged = await fs.readFile(skill, "utf8");
+  assert.match(merged, /step ONE/, "your edit survived");
+  assert.match(merged, /read the manual/, "upstream's edit landed");
+});
+
+test("--archive never reaches for the network, even with a file to merge", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project, { skillBody: MERGE_BODY });
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, (await fs.readFile(skill, "utf8")).replace("step one", "step ONE"));
+
+  const newer = await writeArchive(project, { skillBody: MERGE_BODY.replace("read the docs", "read the manual") });
+  const result = await exec(["update", "--path", project, "--archive", newer]);
+
+  assert.doesNotMatch(result.stdout, /Downloading/, "--archive means this run was told not to use the network");
+  assert.equal(result.stderr, "", "and so it has nothing to warn about");
+  assert.match(result.stdout, /merged 0/, "without a base there is nothing to merge against");
+
+  // The same run merges once the base is supplied from disk.
+  const withBase = await exec(["update", "--path", project, "--archive", newer, "--base-archive", base]);
+  assert.doesNotMatch(withBase.stdout, /Downloading/);
+  assert.match(withBase.stdout, /merged 1/);
+});
+
+test("--no-merge leaves an edited file frozen even when it would merge cleanly", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project, { skillBody: MERGE_BODY });
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, (await fs.readFile(skill, "utf8")).replace("step one", "step ONE"));
+  const before = await fs.readFile(skill, "utf8");
+
+  const newer = await writeArchive(project, { skillBody: MERGE_BODY.replace("read the docs", "read the manual") });
+  const args = ["--path", project, "--archive", newer, "--base-archive", base];
+
+  const result = await exec(["update", ...args, "--no-merge"]);
+  assert.equal(result.code, 2);
+  assert.match(result.stdout, /merged 0/);
+  assert.equal(await fs.readFile(skill, "utf8"), before);
+
+  // The same run without the flag does merge, so the flag is what held it back.
+  const merged = await exec(["update", ...args]);
+  assert.equal(merged.code ?? 0, 0, merged.stderr);
+  assert.match(await fs.readFile(skill, "utf8"), /read the manual/);
+});
+
+test("update leaves a file frozen when the two edits overlap, and still exits 2", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project, { skillBody: MERGE_BODY });
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, (await fs.readFile(skill, "utf8")).replace("step two", "step TWO, mine"));
+  const before = await fs.readFile(skill, "utf8");
+
+  const newer = await writeArchive(project, { skillBody: MERGE_BODY.replace("step two", "step two, theirs") });
+  const result = await exec(["update", "--path", project, "--archive", newer, "--base-archive", base]);
+
+  assert.equal(result.code, 2);
+  assert.match(result.stdout, /merged 0/);
+  assert.match(result.stdout, /overlap in one place/);
+  assert.equal(await fs.readFile(skill, "utf8"), before, "the file was not touched");
+});
+
+test("diff summarises the frozen files and classifies why each is stuck", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project);
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, `${await fs.readFile(skill, "utf8")}\n## My conventions\n`);
+
+  const newer = await writeArchive(project, { skillBody: "alpha v1\n\n## Troubleshooting\n" });
+  const result = await exec(["diff", "--path", project, "--archive", newer, "--base-archive", base]);
+
+  assert.equal(result.code ?? 0, 0, result.stderr);
+  assert.match(result.stdout, /^1 frozen file\. 1 blocked by an overlap\.$/m);
+  assert.match(result.stdout, /skills\/alpha\/SKILL\.md\s+1 region changed, 1 written by both sides/);
+  assert.match(result.stdout, /diff only reads - nothing was written/);
+  assert.doesNotMatch(result.stdout, /## Troubleshooting/, "the summary lists files, not their contents");
+});
+
+test("diff on one path names who wrote each side", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project);
+  await exec(["init", "--path", project, "--archive", base]);
+
+  const skill = path.join(project, ".agents", "skills", "alpha", "SKILL.md");
+  await fs.writeFile(skill, `${await fs.readFile(skill, "utf8")}\n## My conventions\n`);
+
+  const newer = await writeArchive(project, { skillBody: "alpha v1\n\n## Troubleshooting\n" });
+  const args = ["--path", project, "--archive", newer, "--base-archive", base];
+  const result = await exec(["diff", "skills/alpha/SKILL.md", ...args]);
+
+  assert.equal(result.code ?? 0, 0, result.stderr);
+  assert.match(result.stdout, /both sides wrote here/);
+  assert.match(result.stdout, /^\s+yours \| ## My conventions$/m);
+  assert.match(result.stdout, /^\s+upstr \| ## Troubleshooting$/m);
+  assert.doesNotMatch(result.stdout, /^\s+yours \| ## Troubleshooting$/m);
+
+  const asJson = await exec(["diff", "--json", ...args]);
+  const report = JSON.parse(asJson.stdout);
+  assert.equal(report.comparedAgainstBase, true);
+  assert.deepEqual(report.frozen[0].regions[0].authors, ["upstream", "yours"]);
+
+  const missing = await exec(["diff", "agent/helper.md", ...args]);
+  assert.equal(missing.code, 1);
+  assert.match(missing.stderr, /is not frozen/);
+});
+
+test("diff says so when it cannot read the version you installed from", async (t) => {
+  const project = await tmpDir(t);
+  const base = await writeArchive(project);
+  await exec(["init", "--path", project, "--archive", base]);
+  await fs.writeFile(path.join(project, ".agents", "workflows", "go.md"), md("go", "local: yes\n"));
+
+  const newer = await writeArchive(project, { skillBody: "alpha v2" });
+  const result = await exec(["diff", "--path", project, "--archive", newer, "--base-archive", path.join(project, "gone.tar.gz")]);
+
+  assert.equal(result.code ?? 0, 0, result.stderr);
+  assert.match(result.stderr, /warning: could not read the version you installed from/);
+  assert.match(result.stdout, /no way to tell your changes from upstream's/);
+  assert.match(result.stdout, /workflows\/go\.md/);
+});
+
+test("diff says so when nothing is frozen, and leaves the install alone", async (t) => {
+  const project = await tmpDir(t);
+  const archive = await writeArchive(project);
+  await exec(["init", "--path", project, "--archive", archive]);
+
+  const newer = await writeArchive(project, { skillBody: "alpha v2" });
+  const result = await exec(["diff", "--path", project, "--archive", newer]);
+
+  assert.equal(result.code ?? 0, 0, result.stderr);
+  assert.match(result.stdout, /Nothing is frozen/);
+  assert.match(await fs.readFile(path.join(project, ".agents", "skills", "alpha", "SKILL.md"), "utf8"), /alpha v1/);
+});
+
 test("an upstream layout change surfaces as a warning, not a failure", async (t) => {
   const project = await tmpDir(t);
   const files = upstreamFiles();
