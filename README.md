@@ -31,7 +31,7 @@ npx agentic-skills init
 Requirements:
 
 - Node.js `>=20.11`
-- Network access to `codeload.github.com`, where GitHub serves source archives, when you run `init` or `update`
+- Network access to `codeload.github.com`, where GitHub serves source archives, when you run `init`, `update`, or `sync`
 
 ## Quick Start
 
@@ -55,6 +55,7 @@ Point your assistant at `.agents/ARCHITECTURE.md`. It lists every component with
 | --- | --- |
 | `agentic-skills init` | Download ag-kit and install the content. Refuses a non-empty target unless `--force` |
 | `agentic-skills update` | Download ag-kit again and update installed files, keeping the ones you edited |
+| `agentic-skills sync` | Install if missing, update if present. One command that works in both states, for unattended runs |
 | `agentic-skills status` | Show what is installed, from which upstream commit, and which files were changed locally |
 
 | Option | Purpose |
@@ -92,6 +93,28 @@ To stay on a known upstream state instead of `main`, pass a tag or commit. The s
 npx @daldindev/agentic-skills update --ref v2026.8.31
 ```
 
+### Unattended runs
+
+`sync` reconciles the install against upstream whatever state it is in: it creates the directory when it is missing and updates it when it is already there. Nothing has to be known about the target beforehand, which is what makes it the command to put where no one is watching — a `postinstall` hook, a CI step, a container build:
+
+```json
+{
+  "scripts": {
+    "postinstall": "agentic-skills sync"
+  }
+}
+```
+
+Every `npm i` then brings the install to the current upstream, on a fresh clone and on a checkout that already has the content alike.
+
+Your edits survive it: a file you changed is kept, listed, and the command exits `2`. Reach for `--force` only when the install is a derived tree your project regenerates and never edits by hand, `.agents/` in `.gitignore` for instance:
+
+```bash
+agentic-skills sync --force
+```
+
+Copying that second line into a project where `.agents/` is committed means losing an edited skill on every `npm i`, silently. And `--force` only removes exit `2`: a download that cannot reach GitHub still exits `1`.
+
 ## What gets installed
 
 | Upstream path | Installed as |
@@ -127,6 +150,7 @@ In scope:
 - Downloading the upstream roles, skills, and workflows and installing them anywhere
 - Updating an install while preserving local edits
 - Recording upstream provenance with every install
+- Running unattended, from a postinstall hook or a CI step, with one command that works in either state
 
 Out of scope:
 

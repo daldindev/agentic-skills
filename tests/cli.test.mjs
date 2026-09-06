@@ -86,6 +86,39 @@ test("update exits 2 and lists files it skipped because they were modified local
   assert.match(result.stdout, /workflows\/go\.md: modified locally/);
 });
 
+test("sync is idempotent across a missing and an existing install", async (t) => {
+  const project = await tmpDir(t);
+  const archive = await writeArchive(project);
+
+  const first = await exec(["sync", "--path", project, "--archive", archive]);
+  assert.equal(first.code ?? 0, 0, first.stderr);
+  assert.match(first.stdout, /^sync: /m);
+  assert.match(first.stdout, /added 6/);
+  assert.match(first.stdout, /ARCHITECTURE\.md/);
+
+  const newer = await writeArchive(project, { version: "2026.2.2", skillBody: "alpha v2" });
+  const second = await exec(["sync", "--path", project, "--archive", newer]);
+  assert.equal(second.code ?? 0, 0, second.stderr);
+  assert.match(second.stdout, /added 0, updated 2/);
+  assert.doesNotMatch(second.stdout, /ARCHITECTURE\.md to get the inventory/);
+  assert.match(await fs.readFile(path.join(project, ".agents", "skills", "alpha", "SKILL.md"), "utf8"), /alpha v2/);
+});
+
+test("sync --force overwrites local edits instead of exiting 2", async (t) => {
+  const project = await tmpDir(t);
+  const archive = await writeArchive(project);
+  await exec(["sync", "--path", project, "--archive", archive]);
+  await fs.writeFile(path.join(project, ".agents", "workflows", "go.md"), md("go", "local: yes\n"));
+
+  const newer = await writeArchive(project, { skillBody: "alpha v2" });
+  const skipped = await exec(["sync", "--path", project, "--archive", newer]);
+  assert.equal(skipped.code, 2);
+
+  const forced = await exec(["sync", "--path", project, "--archive", newer, "--force"]);
+  assert.equal(forced.code ?? 0, 0, forced.stderr);
+  assert.equal(await fs.readFile(path.join(project, ".agents", "workflows", "go.md"), "utf8"), md("go"));
+});
+
 test("an upstream layout change surfaces as a warning, not a failure", async (t) => {
   const project = await tmpDir(t);
   const files = upstreamFiles();

@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { PACKAGE_ROOT, readJson } from "./fs-utils.mjs";
-import { DEFAULT_INSTALL_DIR, init, status, update } from "./install.mjs";
+import { DEFAULT_INSTALL_DIR, init, status, sync, update } from "./install.mjs";
 import { UPSTREAM, extractPort, loadArchive, materialize } from "./upstream.mjs";
 
 const HELP = `agentic-skills - install the ag-kit agent roles, skills, and workflows into any project
@@ -12,6 +12,7 @@ const HELP = `agentic-skills - install the ag-kit agent roles, skills, and workf
 Usage:
   agentic-skills init    [options]   Download ag-kit and install the content into <path>/<dir>
   agentic-skills update  [options]   Download ag-kit again and update installed files, preserving local edits
+  agentic-skills sync    [options]   Install if missing, update if present; safe to run unattended
   agentic-skills status  [options]   Show what is installed and which files were changed locally
 
 Options:
@@ -100,10 +101,10 @@ const printPlan = (result) => {
   );
   list("Skipped (modified locally; use --force to overwrite)", plan.skip, (item) => `${item.file}: ${item.reason}`);
   list("Kept (removed upstream but modified locally)", plan.keep, (item) => `${item.file}: ${item.reason}`);
-  if (result.mode === "update" && result.hadManifest === false) {
+  if (result.hadManifest === false && plan.skip.length) {
     console.log("\nNo manifest was found, so files that differ from upstream were skipped. Re-run with --force to overwrite them.");
   }
-  if (result.mode === "init" && !result.dryRun) {
+  if (result.created && !result.dryRun) {
     console.log(`\nPoint your assistant at ${path.join(result.installDir, "ARCHITECTURE.md")} to get the inventory.`);
   }
 };
@@ -133,7 +134,7 @@ try {
     console.log(pkg.version);
   } else if (values.help || !command || command === "help") {
     process.stdout.write(HELP);
-  } else if (command === "init" || command === "update") {
+  } else if (command === "init" || command === "update" || command === "sync") {
     const incoming = await fetchIncoming();
     try {
       const options = {
@@ -144,7 +145,8 @@ try {
         incomingDir: incoming.dir,
         upstream: incoming.upstream,
       };
-      const result = command === "init" ? await init(options) : await update(options);
+      const run = { init, update, sync }[command];
+      const result = await run(options);
       if (values.json) console.log(JSON.stringify(result, null, 2));
       else printPlan(result);
       if (result.plan.skip.length || result.plan.keep.length) process.exitCode = 2;

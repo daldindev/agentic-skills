@@ -120,35 +120,15 @@ async function hasContent(dir) {
   return entries.length > 0;
 }
 
-export async function init(options = {}) {
-  const { installDir } = resolveTarget(options);
-  const { incomingDir, upstream = null } = options;
-  const force = Boolean(options.force);
-
-  if (!force && (await hasContent(installDir))) {
-    throw new Error(
-      `${installDir} already exists and is not empty. Run "agentic-skills update" to update it, ` +
-      "or pass --force to overwrite managed files in place.",
-    );
-  }
-
-  const manifest = await loadManifest(installDir);
-  const plan = await planUpdate({ installDir, incomingDir, manifest, force });
-  if (!options.dryRun) {
-    await applyPlan({ installDir, incomingDir, plan });
-    await writeManifest(installDir, plan.incoming, { previous: manifest, upstream });
-  }
-  return { mode: "init", installDir, plan, upstream, dryRun: Boolean(options.dryRun) };
-}
-
-export async function update(options = {}) {
+/**
+ * Plan against the incoming tree, apply it, and record the manifest.
+ * The three commands differ only in the preconditions they enforce first.
+ */
+async function reconcile(mode, options) {
   const { installDir } = resolveTarget(options);
   const { incomingDir, upstream = null } = options;
 
-  if (!(await exists(installDir))) {
-    throw new Error(`${installDir} does not exist. Run "agentic-skills init" first.`);
-  }
-
+  const created = !(await hasContent(installDir));
   const manifest = await loadManifest(installDir);
   const plan = await planUpdate({ installDir, incomingDir, manifest, force: Boolean(options.force) });
   if (!options.dryRun) {
@@ -156,13 +136,48 @@ export async function update(options = {}) {
     await writeManifest(installDir, plan.incoming, { previous: manifest, upstream });
   }
   return {
-    mode: "update",
+    mode,
     installDir,
     plan,
     upstream,
+    created,
     hadManifest: Boolean(manifest),
     dryRun: Boolean(options.dryRun),
   };
+}
+
+export async function init(options = {}) {
+  const { installDir } = resolveTarget(options);
+
+  if (!options.force && (await hasContent(installDir))) {
+    throw new Error(
+      `${installDir} already exists and is not empty. Run "agentic-skills update" to update it, ` +
+      '"agentic-skills sync" if this runs unattended, or pass --force to overwrite managed files in place.',
+    );
+  }
+
+  return reconcile("init", options);
+}
+
+export async function update(options = {}) {
+  const { installDir } = resolveTarget(options);
+
+  if (!(await exists(installDir))) {
+    throw new Error(`${installDir} does not exist. Run "agentic-skills init" first.`);
+  }
+
+  return reconcile("update", options);
+}
+
+/**
+ * Reconcile whatever state the target is in: install it when missing, update it
+ * when it is already there. Neither precondition applies, so this is the command
+ * to run unattended - a postinstall, a CI step, a container build - where one
+ * line has to work on a fresh clone and on an existing tree alike. Local edits
+ * are preserved exactly as with update, and --force overwrites them.
+ */
+export async function sync(options = {}) {
+  return reconcile("sync", options);
 }
 
 /** Local report only; nothing is fetched. */

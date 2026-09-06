@@ -6,6 +6,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-05
+
+### Added
+
+- `agentic-skills sync`: installs when the target is missing and updates when it is already there, so one command covers both states. It is the command for a `postinstall` hook, a CI step, or a container build, where the run cannot stop to ask which state it is in. Local edits are preserved as with `update`; `--force` overwrites them, so exit code 2 cannot happen.
+
+### Changed
+
+- The note about a missing manifest is printed only when files were actually skipped, and now appears for every command rather than only `update`.
+- The error `init` raises on a non-empty target points at `sync` for unattended runs.
+
 ## [0.1.0] - 2026-09-03
 
 ### Added
