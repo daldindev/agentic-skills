@@ -28,12 +28,3 @@ npm run check
 - Keep the CLI commands and flags compatible.
 - Run `npm run check` before opening the pull request.
 
-## Releasing
-
-1. Update `CHANGELOG.md`, moving entries out of `Unreleased`.
-2. Bump `version` in `package.json` and run `npm install` so the lockfile follows.
-3. Run `npm run release:check`.
-4. Commit as `chore: release vX.Y.Z` and push.
-5. Publish a GitHub release for tag `vX.Y.Z`. The `Publish` workflow runs the release checks again and publishes to npm with provenance.
-
-Publishing uses npm Trusted Publishing through GitHub OIDC, so no npm token is stored in the repository. The `@daldindev` scope must exist on npm and the package must be configured there for trusted publishing from this repository's `Publish` workflow.
