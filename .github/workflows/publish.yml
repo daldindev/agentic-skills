@@ -48,7 +48,6 @@ jobs:
             exit 1
           fi
 
-          # Entries still under [Unreleased] mean this commit is past the release it claims to be.
           if awk '/^## \[Unreleased\]/ { inside = 1; next } /^## \[/ { inside = 0 } inside && NF { found = 1 } END { exit !found }' CHANGELOG.md; then
             echo "CHANGELOG.md still lists entries under [Unreleased]. Tag the commit that closes this release, not a later one." >&2
             exit 1
@@ -60,8 +59,6 @@ jobs:
       - name: Run publish checks
         run: npm run release:check
 
-      # A release published after the fact, or a workflow re-run, must not fail
-      # on npm rejecting a version that is already there.
       - name: Check whether this version is already on npm
         id: published
         run: |
