@@ -31,13 +31,26 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
-      - name: Verify the release tag matches the package version
+      - name: Verify the release tag matches the package and the changelog
         if: github.event_name == 'release'
         run: |
-          package_version="$(node -p "require('./package.json').version")"
           tag_version="${GITHUB_REF_NAME#v}"
+
+          package_version="$(node -p "require('./package.json').version")"
           if [ "$package_version" != "$tag_version" ]; then
             echo "Tag $GITHUB_REF_NAME does not match package.json version $package_version" >&2
+            exit 1
+          fi
+
+          changelog_version="$(sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' CHANGELOG.md | head -1)"
+          if [ "$changelog_version" != "$tag_version" ]; then
+            echo "CHANGELOG.md's newest release is $changelog_version, not $tag_version" >&2
+            exit 1
+          fi
+
+          # Entries still under [Unreleased] mean this commit is past the release it claims to be.
+          if awk '/^## \[Unreleased\]/ { inside = 1; next } /^## \[/ { inside = 0 } inside && NF { found = 1 } END { exit !found }' CHANGELOG.md; then
+            echo "CHANGELOG.md still lists entries under [Unreleased]. Tag the commit that closes this release, not a later one." >&2
             exit 1
           fi
 
